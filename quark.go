@@ -28,6 +28,22 @@ package quark
    }
 
    static int
+   open_ruleset(struct quark_ruleset *rs, const char *text, size_t len,
+       char *errbuf, size_t errbuf_len)
+   {
+     FILE *f;
+     int   r;
+
+     quark_ruleset_init(rs);
+     f = fmemopen((void *)text, len, "r");
+     if (f == NULL)
+       return (-1);
+     r = quark_ruleset_parse(rs, f, errbuf, errbuf_len);
+     fclose(f);
+     return (r);
+   }
+
+   static int
    get_event_as_ecs(struct quark_queue *qq, char **ecs_buf, size_t *ecs_buf_len)
    {
      const struct quark_event	*qev;
@@ -269,6 +285,7 @@ type QueueAttr struct {
 	MaxLength      int
 	CacheGraceTime int
 	HoldTime       int
+	Ruleset        string // optional; if set, opens the queue with filtering
 }
 
 // Documented in https://elastic.github.io/quark/quark_queue_get_stats.3.html.
@@ -329,6 +346,27 @@ func OpenQueue(attr QueueAttr) (*Queue, error) {
 	cattr.max_length = C.int(attr.MaxLength)
 	cattr.cache_grace_time = C.int(attr.CacheGraceTime)
 	cattr.hold_time = C.int(attr.HoldTime)
+
+	if attr.Ruleset != "" {
+		rs := (*C.struct_quark_ruleset)(C.calloc(C.size_t(1), C.sizeof_struct_quark_ruleset))
+		if rs == nil {
+			C.free(unsafe.Pointer(queue.quarkQueue))
+			return nil, errors.New("calloc ruleset")
+		}
+		ctext := C.CString(attr.Ruleset)
+		var errbuf [1024]C.char
+		r := C.open_ruleset(rs, ctext, C.size_t(len(attr.Ruleset)),
+			&errbuf[0], C.size_t(len(errbuf)))
+		C.free(unsafe.Pointer(ctext))
+		if r == -1 {
+			C.free(unsafe.Pointer(rs))
+			C.free(unsafe.Pointer(queue.quarkQueue))
+			return nil, fmt.Errorf("parse ruleset: %s", C.GoString(&errbuf[0]))
+		}
+		cattr.ruleset = rs
+		cattr.flags |= C.QQ_NOVA
+	}
+
 	ok, err := C.quark_queue_open(queue.quarkQueue, &cattr)
 	if ok == -1 {
 		C.free(unsafe.Pointer(queue.quarkQueue))
