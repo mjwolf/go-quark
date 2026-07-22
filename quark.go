@@ -364,7 +364,6 @@ func OpenQueue(attr QueueAttr) (*Queue, error) {
 			return nil, fmt.Errorf("parse ruleset: %s", C.GoString(&errbuf[0]))
 		}
 		cattr.ruleset = rs
-		cattr.flags |= C.QQ_NOVA
 	}
 
 	ok, err := C.quark_queue_open(queue.quarkQueue, &cattr)
