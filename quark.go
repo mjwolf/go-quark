@@ -496,6 +496,19 @@ func (queue *Queue) Stats() Stats {
 	return stats
 }
 
+// DisableAggregation clears every entry in Quark's aggregation matrix.
+// It must be called after OpenQueue and before the queue is consumed.
+func (queue *Queue) DisableAggregation() error {
+	for parent := 0; parent < int(C.RAW_NUM_TYPES); parent++ {
+		for child := 0; child < int(C.RAW_NUM_TYPES); child++ {
+			if C.quark_queue_set_agg_matrix(queue.quarkQueue, C.int(parent), C.int(child), nil) != 0 {
+				return errors.New("clear aggregation matrix")
+			}
+		}
+	}
+	return nil
+}
+
 // Sets quark verbosity globally, not per queue.
 func SetVerbose(level int) {
 	C.quark_verbose = C.int(level)
